@@ -5,7 +5,7 @@
   "display": "standalone",
   "background_color": "#667eea",
   "theme_color": "#667eea",
-  "description": "Простой менеджер задач с локальным хранением",
+  "description": "Менеджер задач с push-уведомлениями",
   "icons": [
     {
       "src": "icon-192.png",
