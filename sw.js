@@ -1,4 +1,3 @@
-// sw.js - обновленная версия
 const CACHE_NAME = 'taskmaster-v1.0.0';
 const urlsToCache = [
   '/',
@@ -8,81 +7,64 @@ const urlsToCache = [
   '/manifest.json'
 ];
 
-// Установка
+// Установка service worker
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
-  );
-});
-
-// Fetch
-self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request).then(response => {
-      if (response) return response;
-      return fetch(event.request).then(response => {
-        if (!response || response.status !== 200) return response;
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then(cache => {
-          cache.put(event.request, responseToCache);
-        });
-        return response;
-      });
-    })
-  );
-});
-
-// Push уведомления
-self.addEventListener('push', function(event) {
-  let data = {};
-  
-  if (event.data) {
-    try {
-      data = event.data.json();
-    } catch (e) {
-      data = { title: 'TaskMaster', body: event.data.text() };
-    }
-  }
-  
-  const options = {
-    body: data.body || 'Напоминание о задачах',
-    icon: data.icon || '/icon-192x192.png',
-    badge: '/icon-192x192.png',
-    vibrate: [200, 100, 200],
-    requireInteraction: true, // Уведомление не исчезает автоматически
-    data: {
-      url: data.url || '/',
-      dateOfArrival: Date.now()
-    }
-  };
-  
-  event.waitUntil(
-    self.registration.showNotification(data.title || 'TaskMaster', options)
-  );
-});
-
-// Клик по уведомлению
-self.addEventListener('notificationclick', function(event) {
-  event.notification.close();
-  
-  const url = event.notification.data?.url || '/';
-  
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then(windowClients => {
-        for (let client of windowClients) {
-          if (client.url === url && 'focus' in client) {
-            return client.focus();
-          }
-        }
-        if (clients.openWindow) {
-          return clients.openWindow(url);
-        }
+    caches.open(CACHE_NAME)
+      .then(cache => {
+        console.log('Кэш открыт');
+        return cache.addAll(urlsToCache);
       })
   );
 });
 
-// Активация
+// Перехват запросов и ответ из кэша
+self.addEventListener('fetch', event => {
+  event.respondWith(
+    caches.match(event.request)
+      .then(response => {
+        // Возвращаем кэшированный ответ или запрашиваем из сети
+        if (response) {
+          return response;
+        }
+        
+        return fetch(event.request)
+          .then(response => {
+            // Проверяем валидный ответ
+            if (!response || response.status !== 200 || response.type !== 'basic') {
+              return response;
+            }
+            
+            // Клонируем ответ
+            const responseToCache = response.clone();
+            
+            caches.open(CACHE_NAME)
+              .then(cache => {
+                cache.put(event.request, responseToCache);
+              });
+              
+            return response;
+          });
+      })
+  );
+});
+self.addEventListener('install', function(event) {
+    // Планируем периодические уведомления
+    event.waitUntil(
+        (async () => {
+            if ('periodicSync' in self.registration) {
+                try {
+                    await self.registration.periodicSync.register('reminders', {
+                        minInterval: 1 * 60 * 1000 // Каждые 1 минуты
+                    });
+                } catch (error) {
+                    console.log('Periodic sync not supported:', error);
+                }
+            }
+        })()
+    );
+});
+// Обновление кэша при активации
 self.addEventListener('activate', event => {
   const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
