@@ -3,36 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мои задачи</title>
+    <title>TaskMaster — Твои задачи</title>
     <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div class="bg-gradient"></div>
+    
     <div class="container">
-        <h1>📝 Список задач</h1>
-        
-        <div class="notification-bar">
-            <button id="notificationBtn" class="notification-btn">
-                🔔 Включить уведомления
+        <!-- Шапка -->
+        <div class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">🎯</div>
+                    <h1>TaskMaster</h1>
+                </div>
+                <p class="subtitle">Организуй свои задачи с удовольствием</p>
+            </div>
+        </div>
+
+        <!-- Уведомления -->
+        <div class="notification-card">
+            <div class="notification-info">
+                <span class="bell-icon">🔔</span>
+                <span class="notification-text">Будь в курсе дел</span>
+            </div>
+            <button id="notificationBtn" class="btn-notification">
+                <span class="btn-icon">🔔</span>
+                Включить уведомления
             </button>
-            <span id="notificationStatus" class="notification-status"></span>
         </div>
-        
-        <div class="add-task">
-            <input type="text" id="taskInput" placeholder="Добавить новую задачу...">
-            <button id="addBtn">➕ Добавить</button>
+        <div id="notificationStatus" class="status-message"></div>
+
+        <!-- Форма добавления задачи -->
+        <div class="add-task-card">
+            <div class="input-group">
+                <input type="text" id="taskInput" placeholder="Напиши свою задачу..." autocomplete="off">
+                <button id="addBtn" class="btn-add">
+                    <span>+</span> Добавить
+                </button>
+            </div>
         </div>
 
+        <!-- Фильтры -->
         <div class="filters">
-            <button class="filter-btn active" data-filter="all">Все</button>
-            <button class="filter-btn" data-filter="active">Активные</button>
-            <button class="filter-btn" data-filter="completed">Выполненные</button>
+            <button class="filter-btn active" data-filter="all">
+                <span>📋</span> Все
+            </button>
+            <button class="filter-btn" data-filter="active">
+                <span>🔄</span> Активные
+            </button>
+            <button class="filter-btn" data-filter="completed">
+                <span>✅</span> Выполненные
+            </button>
         </div>
 
-        <ul id="taskList" class="task-list"></ul>
+        <!-- Список задач -->
+        <div class="tasks-wrapper">
+            <ul id="taskList" class="task-list"></ul>
+        </div>
 
-        <div class="task-stats">
-            <span id="taskCount">0 задач</span>
-            <button id="clearCompleted">Очистить выполненные</button>
+        <!-- Статистика -->
+        <div class="stats-card">
+            <div class="stats-info">
+                <span id="taskCount" class="stats-count">0 задач</span>
+                <button id="clearCompleted" class="btn-clear">
+                    🗑️ Очистить выполненные
+                </button>
+            </div>
         </div>
     </div>
 
