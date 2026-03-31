@@ -516,4 +516,12 @@ if ('serviceWorker' in navigator) {
                 console.log('ServiceWorker зарегистрирован: ', registration.scope);
             })
             .catch(error => {
-                console
+                console.log('Ошибка регистрации ServiceWorker: ', error);
+            });
+    });
+}
+
+// Запуск приложения
+document.addEventListener('DOMContentLoaded', () => {
+    new TaskManager();
+});
