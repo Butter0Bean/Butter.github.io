@@ -7,14 +7,10 @@ class NotificationManager {
     }
 
     async init() {
-        // Проверяем, включены ли уведомления
         const savedState = localStorage.getItem('notifications_enabled');
         this.isEnabled = savedState === 'true' && this.permission === 'granted';
-        
-        // Обновляем UI
         this.updateUI();
         
-        // Если разрешение уже дано, но состояние не сохранено
         if (this.permission === 'granted' && savedState !== 'true') {
             this.isEnabled = true;
             localStorage.setItem('notifications_enabled', 'true');
@@ -24,13 +20,12 @@ class NotificationManager {
 
     async requestPermission() {
         if (this.permission === 'granted') {
-            // Если уже есть разрешение, просто включаем уведомления
             this.enable();
             return true;
         }
 
         if (this.permission === 'denied') {
-            this.showNotificationGuide();
+            alert('Уведомления заблокированы. Включите их в настройках браузера.');
             return false;
         }
 
@@ -40,14 +35,12 @@ class NotificationManager {
             
             if (permission === 'granted') {
                 this.enable();
-                this.showWelcomeNotification();
+                this.sendNotification('✅ Уведомления включены', 'Теперь вы будете получать напоминания о задачах');
                 return true;
-            } else {
-                this.showPermissionDenied();
-                return false;
             }
+            return false;
         } catch (error) {
-            console.error('Ошибка запроса разрешения:', error);
+            console.error('Ошибка:', error);
             return false;
         }
     }
@@ -56,7 +49,6 @@ class NotificationManager {
         this.isEnabled = true;
         localStorage.setItem('notifications_enabled', 'true');
         this.updateUI();
-        this.sendNotification('✅ Уведомления включены', 'Теперь вы будете получать напоминания о задачах');
     }
 
     disable() {
@@ -82,36 +74,17 @@ class NotificationManager {
         try {
             const notification = new Notification(title, {
                 body: body,
-                icon: '/icon-192.png',
-                badge: '/icon-192.png',
+                icon: '/icon-192x192.png',
+                badge: '/icon-192x192.png',
                 vibrate: [200, 100, 200],
                 ...options
             });
-
-            // Автоматически закрыть через 5 секунд
             setTimeout(() => notification.close(), 5000);
-            
             return true;
         } catch (error) {
-            console.error('Ошибка отправки уведомления:', error);
+            console.error('Ошибка:', error);
             return false;
         }
-    }
-
-    showWelcomeNotification() {
-        this.sendNotification(
-            '🎉 Добро пожаловать!',
-            'Теперь вы будете получать уведомления о задачах'
-        );
-    }
-
-    showNotificationGuide() {
-        const message = 'Уведомления заблокированы. Чтобы включить их, измените настройки сайта в браузере.';
-        alert(message);
-    }
-
-    showPermissionDenied() {
-        alert('Разрешение на уведомления не получено. Вы можете включить их в настройках браузера.');
     }
 
     updateUI() {
@@ -122,16 +95,14 @@ class NotificationManager {
             if (this.isEnabled && this.permission === 'granted') {
                 btn.textContent = '🔕 Выключить уведомления';
                 btn.classList.add('notification-enabled');
-                btn.classList.remove('disabled');
                 if (status) status.textContent = '✅ Уведомления включены';
             } else if (this.permission === 'denied') {
                 btn.textContent = '🔔 Уведомления заблокированы';
-                btn.classList.add('disabled');
                 btn.disabled = true;
-                if (status) status.textContent = '❌ Уведомления заблокированы в браузере';
+                if (status) status.textContent = '❌ Уведомления заблокированы';
             } else {
                 btn.textContent = '🔔 Включить уведомления';
-                btn.classList.remove('notification-enabled', 'disabled');
+                btn.classList.remove('notification-enabled');
                 btn.disabled = false;
                 if (status) status.textContent = '⚠️ Уведомления отключены';
             }
@@ -146,42 +117,158 @@ class TaskManager {
         this.currentFilter = 'all';
         this.notificationManager = new NotificationManager();
         this.init();
+        this.startReminderInterval();
+        this.startOverdueCheck();
     }
 
-    // Загрузка задач из localStorage
     loadTasks() {
         const tasks = localStorage.getItem('tasks');
         return tasks ? JSON.parse(tasks) : [];
     }
 
-    // Сохранение задач в localStorage
     saveTasks() {
         localStorage.setItem('tasks', JSON.stringify(this.tasks));
+        this.updateStats();
     }
 
-    // Добавление задачи
-    addTask(text) {
+    // Добавление задачи с дедлайном
+    addTask(text, deadline = null) {
         const task = {
             id: Date.now(),
             text: text,
             completed: false,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            deadline: deadline ? new Date(deadline).toISOString() : null,
+            overdueNotified: false
         };
         this.tasks.push(task);
         this.saveTasks();
         this.render();
         
-        // Отправляем уведомление о добавлении задачи
-        this.notificationManager.sendNotification(
-            '📝 Новая задача',
-            `Добавлена задача: "${text}"`
-        );
+        // Уведомление о добавлении
+        if (deadline) {
+            const deadlineDate = new Date(deadline);
+            const formattedDeadline = deadlineDate.toLocaleString('ru-RU');
+            this.notificationManager.sendNotification(
+                '📝 Новая задача с дедлайном',
+                `"${text}"\n⏰ Дедлайн: ${formattedDeadline}`
+            );
+        } else {
+            this.notificationManager.sendNotification(
+                '📝 Новая задача',
+                `Добавлена задача: "${text}"`
+            );
+        }
         
-        // Устанавливаем напоминание через 1 час (опционально)
-        this.scheduleReminder(task);
+        // Напоминание о дедлайне
+        if (deadline) {
+            this.scheduleDeadlineReminder(task);
+        }
     }
 
-    // Удаление задачи
+    // Планирование напоминания о дедлайне
+    scheduleDeadlineReminder(task) {
+        if (!task.deadline) return;
+        
+        const interval = setInterval(() => {
+            const currentTask = this.tasks.find(t => t.id === task.id);
+            if (!currentTask || currentTask.completed) {
+                clearInterval(interval);
+                return;
+            }
+            
+            const now = new Date();
+            const deadline = new Date(currentTask.deadline);
+            const timeLeft = deadline - now;
+            
+            // Если задача просрочена
+            if (timeLeft < 0 && !currentTask.overdueNotified) {
+                this.notificationManager.sendNotification(
+                    '⚠️ ЗАДАЧА ПРОСРОЧЕНА!',
+                    `"${currentTask.text}"\nДедлайн был ${deadline.toLocaleString('ru-RU')}`
+                );
+                currentTask.overdueNotified = true;
+                this.saveTasks();
+                this.render();
+                clearInterval(interval);
+            }
+            // Если до дедлайна осталось меньше 10 минут
+            else if (timeLeft > 0 && timeLeft < 600000 && !currentTask.overdueNotified) {
+                const minutesLeft = Math.floor(timeLeft / 60000);
+                this.notificationManager.sendNotification(
+                    '⏰ СКОРО ДЕДЛАЙН!',
+                    `"${currentTask.text}"\nОсталось ${minutesLeft} минут(ы)`
+                );
+                currentTask.overdueNotified = true;
+                this.saveTasks();
+                clearInterval(interval);
+            }
+        }, 180000); // 3 минуты
+    }
+
+    // Проверка просроченных задач каждую минуту
+    startOverdueCheck() {
+        setInterval(() => {
+            this.tasks.forEach(task => {
+                if (!task.completed && task.deadline) {
+                    const now = new Date();
+                    const deadline = new Date(task.deadline);
+                    
+                    if (now > deadline) {
+                        if (!task.overdueNotified) {
+                            this.notificationManager.sendNotification(
+                                '⚠️ ЗАДАЧА ПРОСРОЧЕНА!',
+                                `"${task.text}"\nДедлайн был ${deadline.toLocaleString('ru-RU')}`
+                            );
+                            task.overdueNotified = true;
+                            this.saveTasks();
+                            this.render();
+                        }
+                    } else {
+                        if (task.overdueNotified && now < deadline) {
+                            task.overdueNotified = false;
+                            this.saveTasks();
+                        }
+                    }
+                }
+            });
+        }, 60000);
+    }
+
+    // Запуск напоминаний каждые 3 минуты
+    startReminderInterval() {
+        setInterval(() => {
+            if (this.notificationManager.isEnabled) {
+                const activeTasks = this.tasks.filter(task => !task.completed);
+                const overdueTasks = this.getOverdueTasks();
+                
+                if (overdueTasks.length > 0) {
+                    const taskList = overdueTasks.map(t => `⚠️ ${t.text}`).join('\n');
+                    this.notificationManager.sendNotification(
+                        '⚠️ Просроченные задачи',
+                        `У вас ${overdueTasks.length} просроченных ${this.getTaskWord(overdueTasks.length)}:\n${taskList}`
+                    );
+                } else if (activeTasks.length > 0) {
+                    const taskList = activeTasks.slice(0, 5).map(t => `• ${t.text}`).join('\n');
+                    const moreText = activeTasks.length > 5 ? `\n...и еще ${activeTasks.length - 5}` : '';
+                    this.notificationManager.sendNotification(
+                        '📋 Активные задачи',
+                        `У вас ${activeTasks.length} ${this.getTaskWord(activeTasks.length)}:\n${taskList}${moreText}`
+                    );
+                }
+            }
+        }, 180000); // 3 минуты
+    }
+
+    getOverdueTasks() {
+        const now = new Date();
+        return this.tasks.filter(task => 
+            !task.completed && 
+            task.deadline && 
+            new Date(task.deadline) < now
+        );
+    }
+
     deleteTask(id) {
         const task = this.tasks.find(task => task.id === id);
         const taskText = task ? task.text : '';
@@ -190,7 +277,6 @@ class TaskManager {
         this.saveTasks();
         this.render();
         
-        // Уведомление об удалении
         if (taskText) {
             this.notificationManager.sendNotification(
                 '🗑️ Задача удалена',
@@ -199,16 +285,25 @@ class TaskManager {
         }
     }
 
-    // Переключение статуса задачи
     toggleTask(id) {
         const task = this.tasks.find(task => task.id === id);
         if (task) {
             task.completed = !task.completed;
-            this.saveTasks();
-            this.render();
-            
-            // Уведомление о выполнении задачи
-            if (task.completed) {
+            if (task.completed && task.deadline) {
+                const deadline = new Date(task.deadline);
+                const now = new Date();
+                if (now > deadline) {
+                    this.notificationManager.sendNotification(
+                        '🎉 Просроченная задача выполнена!',
+                        `Поздравляю! Вы выполнили просроченную задачу: "${task.text}"`
+                    );
+                } else {
+                    this.notificationManager.sendNotification(
+                        '✅ Задача выполнена',
+                        `Поздравляю! Вы выполнили задачу: "${task.text}"`
+                    );
+                }
+            } else if (task.completed) {
                 this.notificationManager.sendNotification(
                     '✅ Задача выполнена',
                     `Поздравляю! Вы выполнили задачу: "${task.text}"`
@@ -219,10 +314,11 @@ class TaskManager {
                     `Задача снова в работе: "${task.text}"`
                 );
             }
+            this.saveTasks();
+            this.render();
         }
     }
 
-    // Очистка выполненных задач
     clearCompleted() {
         const completedCount = this.tasks.filter(task => task.completed).length;
         
@@ -230,41 +326,10 @@ class TaskManager {
         this.saveTasks();
         this.render();
         
-        // Уведомление об очистке
         if (completedCount > 0) {
             this.notificationManager.sendNotification(
                 '🧹 Очистка задач',
                 `Удалено ${completedCount} выполненных ${this.getTaskWord(completedCount)}`
-            );
-        }
-    }
-
-    // Напоминание о задаче (через 1 час)
-    scheduleReminder(task) {
-        if (!this.notificationManager.isEnabled) return;
-        
-        setTimeout(() => {
-            // Проверяем, не выполнена ли задача
-            const currentTask = this.tasks.find(t => t.id === task.id);
-            if (currentTask && !currentTask.completed) {
-                this.notificationManager.sendNotification(
-                    '⏰ Напоминание о задаче',
-                    `Не забыли про задачу: "${task.text}"?`
-                );
-            }
-        }, 3600000); // 1 час
-    }
-
-    // Напоминание о всех невыполненных задачах
-    remindAllTasks() {
-        const activeTasks = this.tasks.filter(task => !task.completed);
-        
-        if (activeTasks.length > 0) {
-            const taskList = activeTasks.map(t => `• ${t.text}`).join('\n');
-            this.notificationManager.sendNotification(
-                '📋 Невыполненные задачи',
-                `У вас ${activeTasks.length} ${this.getTaskWord(activeTasks.length)}:\n${taskList}`,
-                { body: `У вас ${activeTasks.length} ${this.getTaskWord(activeTasks.length)}` }
             );
         }
     }
@@ -276,11 +341,18 @@ class TaskManager {
     }
 
     getFilteredTasks() {
+        const now = new Date();
         switch(this.currentFilter) {
             case 'active':
                 return this.tasks.filter(task => !task.completed);
             case 'completed':
                 return this.tasks.filter(task => task.completed);
+            case 'overdue':
+                return this.tasks.filter(task => 
+                    !task.completed && 
+                    task.deadline && 
+                    new Date(task.deadline) < now
+                );
             default:
                 return this.tasks;
         }
@@ -290,15 +362,40 @@ class TaskManager {
         const total = this.tasks.length;
         const completed = this.tasks.filter(task => task.completed).length;
         const active = total - completed;
+        const overdue = this.getOverdueTasks().length;
         
         const taskCount = document.getElementById('taskCount');
+        const overdueCount = document.getElementById('overdueCount');
+        
         if (taskCount) {
-            if (total === 0) {
-                taskCount.textContent = 'Нет задач';
+            taskCount.textContent = `📊 Всего: ${total} | Активных: ${active} | Выполнено: ${completed}`;
+        }
+        
+        if (overdueCount) {
+            if (overdue > 0) {
+                overdueCount.textContent = `⚠️ Просрочено: ${overdue}`;
+                overdueCount.style.animation = 'pulse 1s ease-in-out infinite';
             } else {
-                taskCount.textContent = `Всего: ${total} | Активных: ${active} | Выполнено: ${completed}`;
+                overdueCount.textContent = '✅ Нет просроченных';
+                overdueCount.style.animation = 'none';
             }
         }
+    }
+
+    formatDeadline(deadline) {
+        if (!deadline) return null;
+        const date = new Date(deadline);
+        const now = new Date();
+        const isOverdue = date < now;
+        
+        const formatted = date.toLocaleString('ru-RU', {
+            day: 'numeric',
+            month: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        return { formatted, isOverdue };
     }
 
     render() {
@@ -306,18 +403,35 @@ class TaskManager {
         const filteredTasks = this.getFilteredTasks();
         
         if (filteredTasks.length === 0) {
-            taskList.innerHTML = '<div class="empty-state">✨ Нет задач</div>';
+            let emptyMessage = '✨ Нет задач';
+            if (this.currentFilter === 'overdue') emptyMessage = '🎉 Нет просроченных задач!';
+            if (this.currentFilter === 'completed') emptyMessage = '📝 Нет выполненных задач';
+            if (this.currentFilter === 'active') emptyMessage = '🚀 Все задачи выполнены!';
+            taskList.innerHTML = `<div class="empty-state">${emptyMessage}</div>`;
             this.updateStats();
             return;
         }
         
-        taskList.innerHTML = filteredTasks.map(task => `
-            <li class="task-item" data-id="${task.id}">
-                <input type="checkbox" class="task-checkbox" ${task.completed ? 'checked' : ''}>
-                <span class="task-text ${task.completed ? 'completed' : ''}">${this.escapeHtml(task.text)}</span>
-                <button class="delete-btn">🗑️ Удалить</button>
-            </li>
-        `).join('');
+        taskList.innerHTML = filteredTasks.map(task => {
+            const deadlineInfo = task.deadline ? this.formatDeadline(task.deadline) : null;
+            const isOverdue = deadlineInfo && deadlineInfo.isOverdue && !task.completed;
+            
+            return `
+                <li class="task-item ${isOverdue ? 'overdue' : ''}" data-id="${task.id}">
+                    <input type="checkbox" class="task-checkbox" ${task.completed ? 'checked' : ''}>
+                    <div class="task-content">
+                        <span class="task-text ${task.completed ? 'completed' : ''}">${this.escapeHtml(task.text)}</span>
+                        ${deadlineInfo ? `
+                            <div class="task-deadline ${isOverdue ? 'overdue' : ''}">
+                                ${isOverdue ? '⚠️ Просрочено: ' : '⏰ Дедлайн: '}
+                                ${deadlineInfo.formatted}
+                            </div>
+                        ` : ''}
+                    </div>
+                    <button class="delete-btn">🗑️</button>
+                </li>
+            `;
+        }).join('');
         
         this.attachEventListeners();
         this.updateStats();
@@ -344,18 +458,19 @@ class TaskManager {
     init() {
         this.render();
         
-        // Добавление новой задачи
         const addBtn = document.getElementById('addBtn');
         const taskInput = document.getElementById('taskInput');
+        const deadlineInput = document.getElementById('taskDeadline');
         
         addBtn.addEventListener('click', () => {
             const text = taskInput.value.trim();
             if (text) {
-                this.addTask(text);
+                const deadline = deadlineInput.value;
+                this.addTask(text, deadline || null);
                 taskInput.value = '';
+                deadlineInput.value = '';
                 taskInput.focus();
             } else {
-                // Уведомление о пустой задаче
                 this.notificationManager.sendNotification(
                     '⚠️ Ошибка',
                     'Пожалуйста, введите текст задачи'
@@ -369,7 +484,6 @@ class TaskManager {
             }
         });
         
-        // Фильтры
         const filterBtns = document.querySelectorAll('.filter-btn');
         filterBtns.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -380,30 +494,26 @@ class TaskManager {
             });
         });
         
-        // Очистка выполненных
         const clearCompleted = document.getElementById('clearCompleted');
         if (clearCompleted) {
             clearCompleted.addEventListener('click', () => this.clearCompleted());
         }
         
-        // Кнопка уведомлений
         const notificationBtn = document.getElementById('notificationBtn');
         if (notificationBtn) {
             notificationBtn.addEventListener('click', () => {
                 this.notificationManager.toggle();
             });
         }
-        
-        // Автоматическое напоминание каждые 30 минут (если уведомления включены)
-        setInterval(() => {
-            if (this.notificationManager.isEnabled && this.tasks.length > 0) {
-                this.remindAllTasks();
-            }
-        }, 1800000); // 30 минут
     }
 }
 
-// Запуск приложения после загрузки страницы
-document.addEventListener('DOMContentLoaded', () => {
-    new TaskManager();
-});
+// Регистрация Service Worker для PWA
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+                console.log('ServiceWorker зарегистрирован: ', registration.scope);
+            })
+            .catch(error => {
+                console
