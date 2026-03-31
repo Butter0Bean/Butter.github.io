@@ -35,14 +35,18 @@
         </div>
         <div id="notificationStatus" class="status-message"></div>
 
-        <!-- Форма добавления задачи -->
+        <!-- Форма добавления задачи с дедлайном -->
         <div class="add-task-card">
             <div class="input-group">
                 <input type="text" id="taskInput" placeholder="Напиши свою задачу..." autocomplete="off">
-                <button id="addBtn" class="btn-add">
-                    <span>+</span> Добавить
-                </button>
+                <div class="datetime-group">
+                    <input type="datetime-local" id="taskDeadline" class="datetime-input">
+                    <button id="addBtn" class="btn-add">
+                        <span>+</span> Добавить
+                    </button>
+                </div>
             </div>
+            <div class="deadline-hint">⏰ Укажите дедлайн (если нужно)</div>
         </div>
 
         <!-- Фильтры -->
@@ -56,6 +60,9 @@
             <button class="filter-btn" data-filter="completed">
                 <span>✅</span> Выполненные
             </button>
+            <button class="filter-btn" data-filter="overdue">
+                <span>⚠️</span> Просроченные
+            </button>
         </div>
 
         <!-- Список задач -->
@@ -66,7 +73,10 @@
         <!-- Статистика -->
         <div class="stats-card">
             <div class="stats-info">
-                <span id="taskCount" class="stats-count">0 задач</span>
+                <div class="stats-details">
+                    <span id="taskCount" class="stats-count">0 задач</span>
+                    <span id="overdueCount" class="overdue-badge">0 просрочено</span>
+                </div>
                 <button id="clearCompleted" class="btn-clear">
                     🗑️ Очистить выполненные
                 </button>
